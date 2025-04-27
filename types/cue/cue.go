@@ -1,4 +1,4 @@
-package main
+package cue
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ryo-kagawa/Music/utils"
 	"github.com/ryo-kagawa/go-utils/conditional"
 )
 
@@ -69,8 +70,8 @@ type Cue struct {
 	Files     []File
 }
 
-func LoadCue(cueFilepath string) (Cue, error) {
-	cueData, err := ReadTextFileToUTF8(cueFilepath)
+func Load(cueFilepath string) (Cue, error) {
+	cueData, err := utils.ReadTextFileToUTF8(cueFilepath)
 	if err != nil {
 		return Cue{}, err
 	}
@@ -79,7 +80,7 @@ func LoadCue(cueFilepath string) (Cue, error) {
 	currentFile := &File{}
 	currentTrack := &Track{}
 
-	for line := range SplitNewLine(cueData) {
+	for line := range utils.SplitNewLine(cueData) {
 		line = strings.TrimLeft(line, " ")
 		// NOTE: FILEはトラックフィールド行以降にも存在するアルバムフィールドなので例外的に処理する
 		if strings.HasPrefix(line, "FILE ") {
@@ -87,7 +88,7 @@ func LoadCue(cueFilepath string) (Cue, error) {
 			FileField := strings.TrimPrefix(line, "FILE ")
 			switch {
 			case strings.HasSuffix(FileField, " WAVE"):
-				fileName := TrimQuotesIfWrapped(strings.TrimSuffix(FileField, " WAVE"))
+				fileName := utils.TrimQuotesIfWrapped(strings.TrimSuffix(FileField, " WAVE"))
 				waveFile, err := os.ReadFile(filepath.Join(filepath.Dir(cueFilepath), fileName))
 				if err != nil {
 					return Cue{}, err
@@ -169,16 +170,16 @@ func LoadCue(cueFilepath string) (Cue, error) {
 				case strings.HasPrefix(remField, "DISCNUMBER "):
 					cue.Rems.DiscId = strings.TrimPrefix(remField, "DISCNUMBER ")
 				case strings.HasPrefix(remField, "COMMENT "):
-					cue.Rems.Comment = TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMMENT "))
+					cue.Rems.Comment = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMMENT "))
 				case strings.HasPrefix(remField, "COMPOSER "):
-					cue.Rems.Composer = TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
+					cue.Rems.Composer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
 				default:
 					return Cue{}, errors.New(fmt.Sprintf("%sに未対応です", line))
 				}
 			case strings.HasPrefix(line, "TITLE "):
-				cue.Title = TrimQuotesIfWrapped(strings.TrimPrefix(line, "TITLE "))
+				cue.Title = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "TITLE "))
 			case strings.HasPrefix(line, "PERFORMER "):
-				cue.Performer = TrimQuotesIfWrapped(strings.TrimPrefix(line, "PERFORMER "))
+				cue.Performer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "PERFORMER "))
 			}
 			continue
 		}
@@ -203,22 +204,22 @@ func LoadCue(cueFilepath string) (Cue, error) {
 			}
 			currentTrack = &currentFile.Tracks[len(currentFile.Tracks)-1]
 		case strings.HasPrefix(line, "TITLE "):
-			currentTrack.Title = TrimQuotesIfWrapped(strings.TrimPrefix(line, "TITLE "))
+			currentTrack.Title = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "TITLE "))
 		case strings.HasPrefix(line, "PERFORMER "):
-			currentTrack.Performer = TrimQuotesIfWrapped(strings.TrimPrefix(line, "PERFORMER "))
+			currentTrack.Performer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "PERFORMER "))
 		case strings.HasPrefix(line, "REM "):
 			remField := strings.TrimPrefix(line, "REM ")
 			switch {
 			case strings.HasPrefix(remField, "COMPOSER "):
-				currentTrack.Rems.Composer = TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
+				currentTrack.Rems.Composer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
 			case strings.HasPrefix(remField, "LYRICIST "):
-				currentTrack.Rems.Lyricist = TrimQuotesIfWrapped(strings.TrimPrefix(remField, "LYRICIST "))
+				currentTrack.Rems.Lyricist = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "LYRICIST "))
 			case strings.HasPrefix(remField, "ARRANGER "):
-				currentTrack.Rems.Arranger = TrimQuotesIfWrapped(strings.TrimPrefix(remField, "ARRANGER "))
+				currentTrack.Rems.Arranger = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "ARRANGER "))
 			case strings.HasPrefix(remField, "REMIXER "):
-				currentTrack.Rems.Remixer = TrimQuotesIfWrapped(strings.TrimPrefix(remField, "REMIXER "))
+				currentTrack.Rems.Remixer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "REMIXER "))
 			case strings.HasPrefix(remField, "BACKING_VOCAL "):
-				currentTrack.Rems.BackingVocal = TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BACKING_VOCAL "))
+				currentTrack.Rems.BackingVocal = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BACKING_VOCAL "))
 			default:
 				return Cue{}, errors.New(fmt.Sprintf("%sに未対応です", line))
 			}
@@ -282,7 +283,20 @@ func (c Cue) SplitTrack() Cue {
 	return cue
 }
 
-func (c Cue) Output(outputDirectory string) error {
+func (c Cue) OutputWave(outputDirectory string) error {
+	for _, file := range c.Files {
+		if filepath.Ext(file.Name) == ".wav" {
+			outPath := filepath.Join(outputDirectory, file.Name)
+			err := os.WriteFile(outPath, file.Binary, 0644)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (c Cue) OutputCuefile(outputDirectory string) error {
 	output := ""
 	if c.Rems.Genre != "" {
 		output += fmt.Sprintf("REM GENRE %s\n", c.Rems.Genre)
@@ -344,13 +358,6 @@ func (c Cue) Output(outputDirectory string) error {
 	err := os.WriteFile(outPath, []byte(output), 0644)
 	if err != nil {
 		return err
-	}
-	for _, file := range c.Files {
-		outPath := filepath.Join(outputDirectory, file.Name)
-		err := os.WriteFile(outPath, file.Binary, 0644)
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
