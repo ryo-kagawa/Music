@@ -56,6 +56,7 @@ func (Command) Execute(arguments []string) (string, error) {
 		cueContents.Files,
 		func(file cue.File) cue.File {
 			if filepath.Ext(file.Name) != ".flac" {
+				os.Remove(filepath.Join(filepath.Dir(cuePath), file.Name))
 				file.Name = strings.TrimSuffix(file.Name, filepath.Ext(file.Name)) + ".flac"
 			}
 			return file
