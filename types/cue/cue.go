@@ -267,6 +267,9 @@ func (c Cue) SplitTrack() Cue {
 			binary.LittleEndian.PutUint32(header[4:8], uint32(end-start+HeaderSize-8))
 			copy(header[8:40], file.Binary[8:40])
 			binary.LittleEndian.PutUint32(header[40:], uint32(end-start))
+			newTrack := track
+			newTrack.Index00 = ""
+			newTrack.Index01 = "00:00:00"
 			cue.Files = append(
 				cue.Files,
 				File{
@@ -274,7 +277,7 @@ func (c Cue) SplitTrack() Cue {
 					Type:   "WAVE",
 					Binary: append(header, file.Binary[start:end]...),
 					Tracks: []Track{
-						track,
+						newTrack,
 					},
 				},
 			)
@@ -296,7 +299,7 @@ func (c Cue) OutputWave(outputDirectory string) error {
 	return nil
 }
 
-func (c Cue) OutputCuefile(outputDirectory string) error {
+func (c Cue) OutputCuefile(outputPath string) error {
 	output := ""
 	if c.Rems.Genre != "" {
 		output += fmt.Sprintf("REM GENRE %s\n", c.Rems.Genre)
@@ -354,8 +357,7 @@ func (c Cue) OutputCuefile(outputDirectory string) error {
 		}
 	}
 
-	outPath := filepath.Join(outputDirectory, fmt.Sprintf("%s.cue", strings.ReplaceAll(c.Title, "/", "_")))
-	err := os.WriteFile(outPath, []byte(output), 0644)
+	err := os.WriteFile(outputPath, []byte(output), 0644)
 	if err != nil {
 		return err
 	}

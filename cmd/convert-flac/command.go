@@ -17,7 +17,6 @@ var _ = (commandline.RootCommand)(Command{})
 
 func (Command) Execute(arguments []string) (string, error) {
 	cuePath := arguments[0]
-	outputDirectory := filepath.Dir(cuePath)
 	config, err := LoadConfig()
 	if err != nil {
 		return "", err
@@ -62,7 +61,7 @@ func (Command) Execute(arguments []string) (string, error) {
 			return file
 		},
 	)
-	if err := cueContents.OutputCuefile(outputDirectory); err != nil {
+	if err := cueContents.OutputCuefile(cuePath); err != nil {
 		return "", err
 	}
 
