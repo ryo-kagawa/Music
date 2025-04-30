@@ -37,11 +37,16 @@ type Track struct {
 	Title     string
 	Performer string
 	Rems      struct {
-		Composer     string
-		Lyricist     string
-		Arranger     string
-		Remixer      string
-		BackingVocal string
+		Composer          string
+		Lyricist          string
+		Guitar            string
+		Bass              string
+		Synthesizer       string
+		AnalogSynthesizer string
+		Percussions       string
+		Arranger          string
+		Remixer           string
+		BackingVocal      string
 	}
 	Index00 string
 	Index01 string
@@ -80,7 +85,7 @@ func Load(cueFilepath string) (Cue, error) {
 	currentFile := &File{}
 	currentTrack := &Track{}
 
-	for line := range utils.SplitNewLine(cueData) {
+	for line := range utils.SplitNewLineWithoutEmpty(cueData) {
 		line = strings.TrimLeft(line, " ")
 		// NOTE: FILEはトラックフィールド行以降にも存在するアルバムフィールドなので例外的に処理する
 		if strings.HasPrefix(line, "FILE ") {
@@ -174,12 +179,16 @@ func Load(cueFilepath string) (Cue, error) {
 				case strings.HasPrefix(remField, "COMPOSER "):
 					cue.Rems.Composer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
 				default:
-					return Cue{}, errors.New(fmt.Sprintf("%sに未対応です", line))
+					return Cue{}, errors.New(fmt.Sprintf("アルバムフィールドの\"%s\"に未対応です", line))
 				}
+			case strings.HasPrefix(line, "CATALOG "):
+				cue.Catalog = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "CATALOG "))
 			case strings.HasPrefix(line, "TITLE "):
 				cue.Title = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "TITLE "))
 			case strings.HasPrefix(line, "PERFORMER "):
 				cue.Performer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "PERFORMER "))
+			default:
+				return Cue{}, errors.New(fmt.Sprintf("アルバムフィールドの\"%s\"に未対応です", line))
 			}
 			continue
 		}
@@ -214,6 +223,16 @@ func Load(cueFilepath string) (Cue, error) {
 				currentTrack.Rems.Composer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
 			case strings.HasPrefix(remField, "LYRICIST "):
 				currentTrack.Rems.Lyricist = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "LYRICIST "))
+			case strings.HasPrefix(remField, "GUITAR "):
+				currentTrack.Rems.Guitar = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "GUITAR "))
+			case strings.HasPrefix(remField, "BASS "):
+				currentTrack.Rems.Bass = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BASS "))
+			case strings.HasPrefix(remField, "SYNTHESIZER "):
+				currentTrack.Rems.Synthesizer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "SYNTHESIZER "))
+			case strings.HasPrefix(remField, "ANALOG_SYNTHESIZER "):
+				currentTrack.Rems.AnalogSynthesizer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "ANALOG_SYNTHESIZER "))
+			case strings.HasPrefix(remField, "PERCUSSIONS "):
+				currentTrack.Rems.Percussions = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "PERCUSSIONS "))
 			case strings.HasPrefix(remField, "ARRANGER "):
 				currentTrack.Rems.Arranger = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "ARRANGER "))
 			case strings.HasPrefix(remField, "REMIXER "):
@@ -221,12 +240,14 @@ func Load(cueFilepath string) (Cue, error) {
 			case strings.HasPrefix(remField, "BACKING_VOCAL "):
 				currentTrack.Rems.BackingVocal = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BACKING_VOCAL "))
 			default:
-				return Cue{}, errors.New(fmt.Sprintf("%sに未対応です", line))
+				return Cue{}, errors.New(fmt.Sprintf("トラックフィールドの\"%s\"に未対応です", line))
 			}
-		case strings.HasPrefix(line, "INDEX 00"):
+		case strings.HasPrefix(line, "INDEX 00 "):
 			currentTrack.Index00 = strings.TrimPrefix(line, "INDEX 00 ")
-		case strings.HasPrefix(line, "INDEX 01"):
+		case strings.HasPrefix(line, "INDEX 01 "):
 			currentTrack.Index01 = strings.TrimPrefix(line, "INDEX 01 ")
+		default:
+			return Cue{}, errors.New(fmt.Sprintf("トラックフィールドの\"%s\"に未対応です", line))
 		}
 	}
 	return cue, nil
@@ -338,6 +359,21 @@ func (c Cue) OutputCuefile(outputPath string) error {
 			}
 			if track.Rems.Lyricist != "" {
 				output += fmt.Sprintf("    REM LYRICIST \"%s\"\n", track.Rems.Lyricist)
+			}
+			if track.Rems.Guitar != "" {
+				output += fmt.Sprintf("    REM GUITAR \"%s\"\n", track.Rems.Guitar)
+			}
+			if track.Rems.Bass != "" {
+				output += fmt.Sprintf("    REM BASS \"%s\"\n", track.Rems.Bass)
+			}
+			if track.Rems.Synthesizer != "" {
+				output += fmt.Sprintf("    REM SYNTHESIZER \"%s\"\n", track.Rems.Synthesizer)
+			}
+			if track.Rems.AnalogSynthesizer != "" {
+				output += fmt.Sprintf("    REM ANALOG_SYNTHESIZER \"%s\"\n", track.Rems.AnalogSynthesizer)
+			}
+			if track.Rems.Percussions != "" {
+				output += fmt.Sprintf("    REM PERCUSSIONS \"%s\"\n", track.Rems.Percussions)
 			}
 			if track.Rems.Arranger != "" {
 				output += fmt.Sprintf("    REM ARRANGER \"%s\"\n", track.Rems.Arranger)

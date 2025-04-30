@@ -44,8 +44,19 @@ func ReadTextFileToUTF8(filePath string) (string, error) {
 	return "", errors.New("元の文字コードが特定できませんでした")
 }
 
-func SplitNewLine(value string) iter.Seq[string] {
-	return strings.SplitSeq(strings.ReplaceAll(value, "\r\n", "\n"), "\n")
+func SplitNewLineWithoutEmpty(value string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for line := range strings.SplitSeq(
+			strings.ReplaceAll(value, "\r\n", "\n"),
+			"\n",
+		) {
+			if line != "" {
+				if !yield(line) {
+					return
+				}
+			}
+		}
+	}
 }
 
 func TrimQuotesIfWrapped(value string) string {
