@@ -21,14 +21,14 @@ func (Command) Execute(arguments []string) (string, error) {
 		return "", err
 	}
 	cue = cue.SplitTrack()
-	outputDirectory := filepath.Join(filepath.Dir(cuePath), strings.ReplaceAll(cue.Title, "/", "_"))
+	outputDirectory := filepath.Join(filepath.Dir(cuePath), strings.ReplaceAll(cue.Album.Field.Title, "/", "_"))
 	if err := os.MkdirAll(outputDirectory, 0755); err != nil {
 		return "", err
 	}
 	if err := cue.OutputWave(outputDirectory); err != nil {
 		return "", err
 	}
-	outputPath := filepath.Join(outputDirectory, fmt.Sprintf("%s.cue", strings.ReplaceAll(cue.Title, "/", "_")))
+	outputPath := filepath.Join(outputDirectory, fmt.Sprintf("%s.cue", strings.ReplaceAll(cue.Album.Field.Title, "/", "_")))
 	if err := cue.OutputCuefile(outputPath); err != nil {
 		return "", err
 	}

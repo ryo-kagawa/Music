@@ -32,11 +32,23 @@ const frames = 75
 const FrameSize = samplingRate * samplingSize * channels / frames
 const HeaderSize = 44
 
-type Track struct {
-	Number    int
+type TrackSubCommand struct {
+	Isrc  string
+	Index struct {
+		Index00 string
+		Index01 string
+	}
+}
+
+type TrackCommand struct {
+	Track      int
+	SubCommand TrackSubCommand
+}
+
+type TrackField struct {
 	Title     string
 	Performer string
-	Rems      struct {
+	Rem       struct {
 		Composer          string
 		Lyricist          string
 		Guitar            string
@@ -48,8 +60,11 @@ type Track struct {
 		Remixer           string
 		BackingVocal      string
 	}
-	Index00 string
-	Index01 string
+}
+
+type Track struct {
+	Command TrackCommand
+	Field   TrackField
 }
 
 type File struct {
@@ -59,20 +74,32 @@ type File struct {
 	Tracks []Track
 }
 
-// CUEというよりアルバムフィールド
-type Cue struct {
-	Rems struct {
+type AlbumCommand struct {
+	Files []File
+}
+
+type AlbumField struct {
+	Rem struct {
 		Genre      string
 		Date       string
 		DiscId     string
 		DiscNumber string
+		TotalDiscs string
 		Composer   string
 		Comment    string
 	}
 	Catalog   string
 	Title     string
 	Performer string
-	Files     []File
+}
+
+type Album struct {
+	Command AlbumCommand
+	Field   AlbumField
+}
+
+type Cue struct {
+	Album Album
 }
 
 func Load(cueFilepath string) (Cue, error) {
@@ -145,8 +172,8 @@ func Load(cueFilepath string) (Cue, error) {
 				if !bytes.Equal(waveFile[36:40], []byte{0x64, 0x61, 0x74, 0x61}) {
 					return Cue{}, errors.New("WAVEフォーマットエラー")
 				}
-				cue.Files = append(
-					cue.Files,
+				cue.Album.Command.Files = append(
+					cue.Album.Command.Files,
 					File{
 						Name:   fileName,
 						Type:   "WAVE",
@@ -156,43 +183,45 @@ func Load(cueFilepath string) (Cue, error) {
 			default:
 				return Cue{}, errors.New("CUEファイルが不正です")
 			}
-			currentFile = &cue.Files[len(cue.Files)-1]
+			currentFile = &cue.Album.Command.Files[len(cue.Album.Command.Files)-1]
 			albumFieldFlag = false
 			continue
 		}
 		if albumFieldFlag {
-			// NOTE: アルバムフィールド
+			// NOTE: アルバム
 			switch {
 			case strings.HasPrefix(line, "REM "):
 				remField := strings.TrimPrefix(line, "REM ")
 				switch {
 				case strings.HasPrefix(remField, "GENRE "):
-					cue.Rems.Genre = strings.TrimPrefix(remField, "GENRE ")
+					cue.Album.Field.Rem.Genre = strings.TrimPrefix(remField, "GENRE ")
 				case strings.HasPrefix(remField, "DATE "):
-					cue.Rems.Date = strings.TrimPrefix(remField, "DATE ")
+					cue.Album.Field.Rem.Date = strings.TrimPrefix(remField, "DATE ")
 				case strings.HasPrefix(remField, "DISCID "):
-					cue.Rems.DiscId = strings.TrimPrefix(remField, "DISCID ")
+					cue.Album.Field.Rem.DiscId = strings.TrimPrefix(remField, "DISCID ")
 				case strings.HasPrefix(remField, "DISCNUMBER "):
-					cue.Rems.DiscId = strings.TrimPrefix(remField, "DISCNUMBER ")
+					cue.Album.Field.Rem.DiscId = strings.TrimPrefix(remField, "DISCNUMBER ")
+				case strings.HasPrefix(remField, "TOTALDISCS "):
+					cue.Album.Field.Rem.DiscId = strings.TrimPrefix(remField, "TOTALDISCS ")
 				case strings.HasPrefix(remField, "COMMENT "):
-					cue.Rems.Comment = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMMENT "))
+					cue.Album.Field.Rem.Comment = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMMENT "))
 				case strings.HasPrefix(remField, "COMPOSER "):
-					cue.Rems.Composer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
+					cue.Album.Field.Rem.Composer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
 				default:
 					return Cue{}, errors.New(fmt.Sprintf("アルバムフィールドの\"%s\"に未対応です", line))
 				}
 			case strings.HasPrefix(line, "CATALOG "):
-				cue.Catalog = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "CATALOG "))
+				cue.Album.Field.Catalog = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "CATALOG "))
 			case strings.HasPrefix(line, "TITLE "):
-				cue.Title = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "TITLE "))
+				cue.Album.Field.Title = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "TITLE "))
 			case strings.HasPrefix(line, "PERFORMER "):
-				cue.Performer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "PERFORMER "))
+				cue.Album.Field.Performer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "PERFORMER "))
 			default:
 				return Cue{}, errors.New(fmt.Sprintf("アルバムフィールドの\"%s\"に未対応です", line))
 			}
 			continue
 		}
-		// NOTE: トラックフィールド
+		// NOTE: トラック
 		switch {
 		case strings.HasPrefix(line, "TRACK "):
 			trackField := strings.TrimPrefix(line, "TRACK ")
@@ -205,47 +234,57 @@ func Load(cueFilepath string) (Cue, error) {
 				currentFile.Tracks = append(
 					currentFile.Tracks,
 					Track{
-						Number: number,
+						Command: TrackCommand{
+							Track: number,
+						},
 					},
 				)
 			default:
 				return Cue{}, errors.New("CUEファイルが不正です")
 			}
 			currentTrack = &currentFile.Tracks[len(currentFile.Tracks)-1]
+		case strings.HasPrefix(line, "ISRC "):
+			currentTrack.Command.SubCommand.Isrc = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "ISRC "))
 		case strings.HasPrefix(line, "TITLE "):
-			currentTrack.Title = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "TITLE "))
+			currentTrack.Field.Title = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "TITLE "))
 		case strings.HasPrefix(line, "PERFORMER "):
-			currentTrack.Performer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "PERFORMER "))
+			currentTrack.Field.Performer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "PERFORMER "))
 		case strings.HasPrefix(line, "REM "):
 			remField := strings.TrimPrefix(line, "REM ")
 			switch {
 			case strings.HasPrefix(remField, "COMPOSER "):
-				currentTrack.Rems.Composer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
+				currentTrack.Field.Rem.Composer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
 			case strings.HasPrefix(remField, "LYRICIST "):
-				currentTrack.Rems.Lyricist = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "LYRICIST "))
+				currentTrack.Field.Rem.Lyricist = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "LYRICIST "))
 			case strings.HasPrefix(remField, "GUITAR "):
-				currentTrack.Rems.Guitar = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "GUITAR "))
+				currentTrack.Field.Rem.Guitar = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "GUITAR "))
 			case strings.HasPrefix(remField, "BASS "):
-				currentTrack.Rems.Bass = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BASS "))
+				currentTrack.Field.Rem.Bass = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BASS "))
 			case strings.HasPrefix(remField, "SYNTHESIZER "):
-				currentTrack.Rems.Synthesizer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "SYNTHESIZER "))
+				currentTrack.Field.Rem.Synthesizer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "SYNTHESIZER "))
 			case strings.HasPrefix(remField, "ANALOG_SYNTHESIZER "):
-				currentTrack.Rems.AnalogSynthesizer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "ANALOG_SYNTHESIZER "))
+				currentTrack.Field.Rem.AnalogSynthesizer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "ANALOG_SYNTHESIZER "))
 			case strings.HasPrefix(remField, "PERCUSSIONS "):
-				currentTrack.Rems.Percussions = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "PERCUSSIONS "))
+				currentTrack.Field.Rem.Percussions = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "PERCUSSIONS "))
 			case strings.HasPrefix(remField, "ARRANGER "):
-				currentTrack.Rems.Arranger = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "ARRANGER "))
+				currentTrack.Field.Rem.Arranger = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "ARRANGER "))
 			case strings.HasPrefix(remField, "REMIXER "):
-				currentTrack.Rems.Remixer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "REMIXER "))
+				currentTrack.Field.Rem.Remixer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "REMIXER "))
 			case strings.HasPrefix(remField, "BACKING_VOCAL "):
-				currentTrack.Rems.BackingVocal = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BACKING_VOCAL "))
+				currentTrack.Field.Rem.BackingVocal = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BACKING_VOCAL "))
 			default:
 				return Cue{}, errors.New(fmt.Sprintf("トラックフィールドの\"%s\"に未対応です", line))
 			}
-		case strings.HasPrefix(line, "INDEX 00 "):
-			currentTrack.Index00 = strings.TrimPrefix(line, "INDEX 00 ")
-		case strings.HasPrefix(line, "INDEX 01 "):
-			currentTrack.Index01 = strings.TrimPrefix(line, "INDEX 01 ")
+		case strings.HasPrefix(line, "INDEX "):
+			indexParameter := strings.TrimPrefix(line, "INDEX ")
+			switch {
+			case strings.HasPrefix(indexParameter, "00 "):
+				currentTrack.Command.SubCommand.Index.Index00 = strings.TrimPrefix(line, "INDEX 00 ")
+			case strings.HasPrefix(indexParameter, "01 "):
+				currentTrack.Command.SubCommand.Index.Index01 = strings.TrimPrefix(line, "INDEX 01 ")
+			default:
+				return Cue{}, errors.New(fmt.Sprintf("トラックフィールドの\"%s\"に未対応です", line))
+			}
 		default:
 			return Cue{}, errors.New(fmt.Sprintf("トラックフィールドの\"%s\"に未対応です", line))
 		}
@@ -254,26 +293,22 @@ func Load(cueFilepath string) (Cue, error) {
 }
 
 func (c Cue) SplitTrack() Cue {
-	cue := Cue{}
-	cue.Rems.Genre = c.Rems.Genre
-	cue.Rems.Date = c.Rems.Date
-	cue.Rems.DiscId = c.Rems.DiscId
-	cue.Rems.DiscNumber = c.Rems.DiscNumber
-	cue.Rems.Composer = c.Rems.Composer
-	cue.Rems.Comment = c.Rems.Comment
-	cue.Catalog = c.Catalog
-	cue.Title = c.Title
-	cue.Performer = c.Performer
-	for _, file := range c.Files {
+	cue := c
+	cue.Album.Command.Files = []File{}
+	for _, file := range c.Album.Command.Files {
 		for trackIndex, track := range file.Tracks {
-			mm, _ := strconv.Atoi(track.Index01[0:2])
-			ss, _ := strconv.Atoi(track.Index01[3:5])
-			ff, _ := strconv.Atoi(track.Index01[6:8])
+			mm, _ := strconv.Atoi(track.Command.SubCommand.Index.Index01[0:2])
+			ss, _ := strconv.Atoi(track.Command.SubCommand.Index.Index01[3:5])
+			ff, _ := strconv.Atoi(track.Command.SubCommand.Index.Index01[6:8])
 			start := HeaderSize + ((mm*60+ss)*75+ff)*FrameSize
 			end := conditional.Func(
 				trackIndex != len(file.Tracks)-1,
 				func() int {
-					index := conditional.Value(file.Tracks[trackIndex+1].Index00 != "", file.Tracks[trackIndex+1].Index00, file.Tracks[trackIndex+1].Index01)
+					index := conditional.Value(
+						file.Tracks[trackIndex+1].Command.SubCommand.Index.Index00 != "",
+						file.Tracks[trackIndex+1].Command.SubCommand.Index.Index00,
+						file.Tracks[trackIndex+1].Command.SubCommand.Index.Index01,
+					)
 					mm, _ := strconv.Atoi(index[0:2])
 					ss, _ := strconv.Atoi(index[3:5])
 					ff, _ := strconv.Atoi(index[6:8])
@@ -289,12 +324,12 @@ func (c Cue) SplitTrack() Cue {
 			copy(header[8:40], file.Binary[8:40])
 			binary.LittleEndian.PutUint32(header[40:], uint32(end-start))
 			newTrack := track
-			newTrack.Index00 = ""
-			newTrack.Index01 = "00:00:00"
-			cue.Files = append(
-				cue.Files,
+			newTrack.Command.SubCommand.Index.Index00 = ""
+			newTrack.Command.SubCommand.Index.Index01 = "00:00:00"
+			cue.Album.Command.Files = append(
+				cue.Album.Command.Files,
 				File{
-					Name:   fmt.Sprintf("%02d %s.wav", track.Number, track.Title),
+					Name:   fmt.Sprintf("%02d %s.wav", track.Command.Track, track.Field.Title),
 					Type:   "WAVE",
 					Binary: append(header, file.Binary[start:end]...),
 					Tracks: []Track{
@@ -308,7 +343,7 @@ func (c Cue) SplitTrack() Cue {
 }
 
 func (c Cue) OutputWave(outputDirectory string) error {
-	for _, file := range c.Files {
+	for _, file := range c.Album.Command.Files {
 		if filepath.Ext(file.Name) == ".wav" {
 			outPath := filepath.Join(outputDirectory, file.Name)
 			err := os.WriteFile(outPath, file.Binary, 0644)
@@ -322,73 +357,79 @@ func (c Cue) OutputWave(outputDirectory string) error {
 
 func (c Cue) OutputCuefile(outputPath string) error {
 	output := ""
-	if c.Rems.Genre != "" {
-		output += fmt.Sprintf("REM GENRE %s\n", c.Rems.Genre)
+	if c.Album.Field.Rem.Genre != "" {
+		output += fmt.Sprintf("REM GENRE \"%s\"\n", c.Album.Field.Rem.Genre)
 	}
-	if c.Rems.Date != "" {
-		output += fmt.Sprintf("REM DATE %s\n", c.Rems.Date)
+	if c.Album.Field.Rem.Date != "" {
+		output += fmt.Sprintf("REM DATE %s\n", c.Album.Field.Rem.Date)
 	}
-	if c.Rems.DiscId != "" {
-		output += fmt.Sprintf("REM DISCID %s\n", c.Rems.DiscId)
+	if c.Album.Field.Rem.DiscId != "" {
+		output += fmt.Sprintf("REM DISCID %s\n", c.Album.Field.Rem.DiscId)
 	}
-	if c.Rems.DiscNumber != "" {
-		output += fmt.Sprintf("REM DISCNUMBER %s\n", c.Rems.DiscNumber)
+	if c.Album.Field.Rem.DiscNumber != "" {
+		output += fmt.Sprintf("REM DISCNUMBER %s\n", c.Album.Field.Rem.DiscNumber)
 	}
-	if c.Rems.Comment != "" {
-		output += fmt.Sprintf("REM COMMENT \"%s\"\n", c.Rems.Comment)
+	if c.Album.Field.Rem.TotalDiscs != "" {
+		output += fmt.Sprintf("REM TOTALDISCS %s\n", c.Album.Field.Rem.TotalDiscs)
 	}
-	if c.Catalog != "" {
-		output += fmt.Sprintf("CATALOG %s\n", c.Catalog)
+	if c.Album.Field.Rem.Comment != "" {
+		output += fmt.Sprintf("REM COMMENT \"%s\"\n", c.Album.Field.Rem.Comment)
 	}
-	if c.Title != "" {
-		output += fmt.Sprintf("TITLE \"%s\"\n", c.Title)
+	if c.Album.Field.Catalog != "" {
+		output += fmt.Sprintf("CATALOG %s\n", c.Album.Field.Catalog)
 	}
-	if c.Performer != "" {
-		output += fmt.Sprintf("PERFORMER \"%s\"\n", c.Performer)
+	if c.Album.Field.Title != "" {
+		output += fmt.Sprintf("TITLE \"%s\"\n", c.Album.Field.Title)
 	}
-	for _, file := range c.Files {
+	if c.Album.Field.Performer != "" {
+		output += fmt.Sprintf("PERFORMER \"%s\"\n", c.Album.Field.Performer)
+	}
+	for _, file := range c.Album.Command.Files {
 		output += fmt.Sprintf("FILE \"%s\" WAVE\n", file.Name)
 		for _, track := range file.Tracks {
-			output += fmt.Sprintf("  TRACK %02d AUDIO\n", track.Number)
-			output += fmt.Sprintf("    TITLE \"%s\"\n", track.Title)
-			if track.Performer != "" {
-				output += fmt.Sprintf("    PERFORMER \"%s\"\n", track.Performer)
+			output += fmt.Sprintf("  TRACK %02d AUDIO\n", track.Command.Track)
+			if track.Command.SubCommand.Isrc != "" {
+				output += fmt.Sprintf("    ISRC %s\n", track.Command.SubCommand.Isrc)
 			}
-			if track.Rems.Composer != "" {
-				output += fmt.Sprintf("    REM COMPOSER \"%s\"\n", track.Rems.Composer)
+			output += fmt.Sprintf("    TITLE \"%s\"\n", track.Field.Title)
+			if track.Field.Performer != "" {
+				output += fmt.Sprintf("    PERFORMER \"%s\"\n", track.Field.Performer)
 			}
-			if track.Rems.Lyricist != "" {
-				output += fmt.Sprintf("    REM LYRICIST \"%s\"\n", track.Rems.Lyricist)
+			if track.Field.Rem.Composer != "" {
+				output += fmt.Sprintf("    REM COMPOSER \"%s\"\n", track.Field.Rem.Composer)
 			}
-			if track.Rems.Guitar != "" {
-				output += fmt.Sprintf("    REM GUITAR \"%s\"\n", track.Rems.Guitar)
+			if track.Field.Rem.Lyricist != "" {
+				output += fmt.Sprintf("    REM LYRICIST \"%s\"\n", track.Field.Rem.Lyricist)
 			}
-			if track.Rems.Bass != "" {
-				output += fmt.Sprintf("    REM BASS \"%s\"\n", track.Rems.Bass)
+			if track.Field.Rem.Guitar != "" {
+				output += fmt.Sprintf("    REM GUITAR \"%s\"\n", track.Field.Rem.Guitar)
 			}
-			if track.Rems.Synthesizer != "" {
-				output += fmt.Sprintf("    REM SYNTHESIZER \"%s\"\n", track.Rems.Synthesizer)
+			if track.Field.Rem.Bass != "" {
+				output += fmt.Sprintf("    REM BASS \"%s\"\n", track.Field.Rem.Bass)
 			}
-			if track.Rems.AnalogSynthesizer != "" {
-				output += fmt.Sprintf("    REM ANALOG_SYNTHESIZER \"%s\"\n", track.Rems.AnalogSynthesizer)
+			if track.Field.Rem.Synthesizer != "" {
+				output += fmt.Sprintf("    REM SYNTHESIZER \"%s\"\n", track.Field.Rem.Synthesizer)
 			}
-			if track.Rems.Percussions != "" {
-				output += fmt.Sprintf("    REM PERCUSSIONS \"%s\"\n", track.Rems.Percussions)
+			if track.Field.Rem.AnalogSynthesizer != "" {
+				output += fmt.Sprintf("    REM ANALOG_SYNTHESIZER \"%s\"\n", track.Field.Rem.AnalogSynthesizer)
 			}
-			if track.Rems.Arranger != "" {
-				output += fmt.Sprintf("    REM ARRANGER \"%s\"\n", track.Rems.Arranger)
+			if track.Field.Rem.Percussions != "" {
+				output += fmt.Sprintf("    REM PERCUSSIONS \"%s\"\n", track.Field.Rem.Percussions)
 			}
-			if track.Rems.Remixer != "" {
-				output += fmt.Sprintf("    REM REMIXER \"%s\"\n", track.Rems.Remixer)
+			if track.Field.Rem.Arranger != "" {
+				output += fmt.Sprintf("    REM ARRANGER \"%s\"\n", track.Field.Rem.Arranger)
 			}
-			if track.Rems.BackingVocal != "" {
-				output += fmt.Sprintf("    REM BACKING_VOCAL \"%s\"\n", track.Rems.BackingVocal)
+			if track.Field.Rem.Remixer != "" {
+				output += fmt.Sprintf("    REM REMIXER \"%s\"\n", track.Field.Rem.Remixer)
 			}
-			if track.Index00 != "" {
-				output += fmt.Sprintf("    INDEX 00 %s\n", track.Index00)
+			if track.Field.Rem.BackingVocal != "" {
+				output += fmt.Sprintf("    REM BACKING_VOCAL \"%s\"\n", track.Field.Rem.BackingVocal)
 			}
-			if track.Index01 != "" {
-				output += fmt.Sprintf("    INDEX 01 %s\n", track.Index01)
+			if track.Command.SubCommand.Index.Index00 != "" {
+				output += fmt.Sprintf("    INDEX 00 %s\n", track.Command.SubCommand.Index.Index00)
+			}
+			if track.Command.SubCommand.Index.Index01 != "" {
+				output += fmt.Sprintf("    INDEX 01 %s\n", track.Command.SubCommand.Index.Index01)
 			}
 		}
 	}
