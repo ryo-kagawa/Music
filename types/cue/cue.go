@@ -194,7 +194,7 @@ func Load(cueFilepath string) (Cue, error) {
 				remField := strings.TrimPrefix(line, "REM ")
 				switch {
 				case strings.HasPrefix(remField, "GENRE "):
-					cue.Album.Field.Rem.Genre = strings.TrimPrefix(remField, "GENRE ")
+					cue.Album.Field.Rem.Genre = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "GENRE "))
 				case strings.HasPrefix(remField, "DATE "):
 					cue.Album.Field.Rem.Date = strings.TrimPrefix(remField, "DATE ")
 				case strings.HasPrefix(remField, "DISCID "):
