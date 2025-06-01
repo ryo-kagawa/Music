@@ -1,4 +1,4 @@
 github.com/ryo-kagawa/go-utils v1.3.0 h1:ks5m/8V2SAZ4HRtrGAPP1GkmDu/ee0+NrfGODkhJrcE=
 github.com/ryo-kagawa/go-utils v1.3.0/go.mod h1:H2sCkC83sJavplL661y+ej+GFrPiUQa4mDlYkTVdWRo=
-golang.org/x/text v0.24.0 h1:dd5Bzh4yt5KYA8f9CJHCP4FB4D51c2c6JvN37xJJkJ0=
-golang.org/x/text v0.24.0/go.mod h1:L8rBsPeo2pSS+xqN0d5u2ikmjtmoJbDBT1b7nHvFCdU=
+golang.org/x/text v0.25.0 h1:qVyWApTSYLk/drJRO5mDlNYskwQznZmkpV2c8q9zls4=
+golang.org/x/text v0.25.0/go.mod h1:WEdwpYrmk1qmdHvhkSTNPm3app7v4rsT8F2UD6+VHIA=
