@@ -20,7 +20,7 @@ import (
 const samplingRate = 44100
 
 // 16bit = 2Byte
-const samplingSize = 16 / 8
+const bitDepth = 16 / 8
 
 // 2CH
 const channels = 2
@@ -29,7 +29,7 @@ const channels = 2
 const frames = 75
 
 // 44.1kHz * 16bit量子化 * ステレオ / フレーム数
-const FrameSize = samplingRate * samplingSize * channels / frames
+const FrameSize = samplingRate * bitDepth * channels / frames
 const HeaderSize = 44
 
 type TrackSubCommand struct {
@@ -208,7 +208,7 @@ func Load(cueFilepath string) (Cue, error) {
 				case strings.HasPrefix(remField, "COMPOSER "):
 					cue.Album.Field.Rem.Composer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
 				default:
-					return Cue{}, errors.New(fmt.Sprintf("アルバムフィールドの\"%s\"に未対応です", line))
+					return Cue{}, fmt.Errorf("アルバムフィールドの\"%s\"に未対応です", line)
 				}
 			case strings.HasPrefix(line, "CATALOG "):
 				cue.Album.Field.Catalog = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "CATALOG "))
@@ -217,7 +217,7 @@ func Load(cueFilepath string) (Cue, error) {
 			case strings.HasPrefix(line, "PERFORMER "):
 				cue.Album.Field.Performer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(line, "PERFORMER "))
 			default:
-				return Cue{}, errors.New(fmt.Sprintf("アルバムフィールドの\"%s\"に未対応です", line))
+				return Cue{}, fmt.Errorf("アルバムフィールドの\"%s\"に未対応です", line)
 			}
 			continue
 		}
@@ -273,7 +273,7 @@ func Load(cueFilepath string) (Cue, error) {
 			case strings.HasPrefix(remField, "BACKING_VOCAL "):
 				currentTrack.Field.Rem.BackingVocal = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BACKING_VOCAL "))
 			default:
-				return Cue{}, errors.New(fmt.Sprintf("トラックフィールドの\"%s\"に未対応です", line))
+				return Cue{}, fmt.Errorf("トラックフィールドの\"%s\"に未対応です", line)
 			}
 		case strings.HasPrefix(line, "INDEX "):
 			indexParameter := strings.TrimPrefix(line, "INDEX ")
@@ -283,10 +283,10 @@ func Load(cueFilepath string) (Cue, error) {
 			case strings.HasPrefix(indexParameter, "01 "):
 				currentTrack.Command.SubCommand.Index.Index01 = strings.TrimPrefix(line, "INDEX 01 ")
 			default:
-				return Cue{}, errors.New(fmt.Sprintf("トラックフィールドの\"%s\"に未対応です", line))
+				return Cue{}, fmt.Errorf("トラックフィールドの\"%s\"に未対応です", line)
 			}
 		default:
-			return Cue{}, errors.New(fmt.Sprintf("トラックフィールドの\"%s\"に未対応です", line))
+			return Cue{}, fmt.Errorf("トラックフィールドの\"%s\"に未対応です", line)
 		}
 	}
 	return cue, nil
