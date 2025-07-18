@@ -1,10 +1,10 @@
 package cdda
 
 import (
-	"bytes"
 	"fmt"
 	"unsafe"
 
+	"github.com/ryo-kagawa/go-utils/conditional"
 	"golang.org/x/sys/windows"
 )
 
@@ -21,10 +21,44 @@ type RAW_READ_INFO struct {
 	TrackMode   uint32
 }
 
-func ReadAllSector(handle windows.Handle, endLBA int, verifyCount int) ([]byte, error) {
+func msfToLBA(min, sec, frame byte) int {
+	return (((int(min) * 60) + int(sec)) * 75) + int(frame)
+}
+
+func ReadAllSector(handle windows.Handle) ([]byte, error) {
+	toc, err := ReadTOC(handle)
+	if err != nil {
+		return nil, err
+	}
+
+	leadOutLBA := 0
+	track01LBA := 0
+	for _, descriptor := range toc.Descriptors {
+		switch descriptor.Point {
+		case 0x00:
+		case 0x01:
+			track01LBA = conditional.Value(
+				msfToLBA(descriptor.MsfExtra[0], descriptor.MsfExtra[1], descriptor.MsfExtra[2]) != 0,
+				msfToLBA(descriptor.MsfExtra[0], descriptor.MsfExtra[1], descriptor.MsfExtra[2]),
+				msfToLBA(descriptor.Msf[0], descriptor.Msf[1], descriptor.Msf[2]),
+			)
+		case 0xA0:
+		case 0xA1:
+		case 0xA2:
+			leadOutLBA = conditional.Value(
+				msfToLBA(descriptor.MsfExtra[0], descriptor.MsfExtra[1], descriptor.MsfExtra[2]) != 0,
+				msfToLBA(descriptor.MsfExtra[0], descriptor.MsfExtra[1], descriptor.MsfExtra[2]),
+				msfToLBA(descriptor.Msf[0], descriptor.Msf[1], descriptor.Msf[2]),
+			)
+		case 0xB0:
+		case 0xB1:
+		}
+	}
+	endLBA := leadOutLBA - track01LBA
+
 	result := make([]byte, 0, endLBA*RAW_SECTOR_SIZE)
 	for lba := range endLBA {
-		sectorBuffer, err := ReadSector(handle, lba, verifyCount)
+		sectorBuffer, err := ReadSector(handle, lba)
 		if err != nil {
 			return nil, fmt.Errorf("lba: %d not read: %v", lba, err)
 		}
@@ -34,14 +68,13 @@ func ReadAllSector(handle windows.Handle, endLBA int, verifyCount int) ([]byte, 
 	return result, nil
 }
 
-func readSector(handle windows.Handle, sector int) ([]byte, error) {
+func ReadSector(handle windows.Handle, sector int) ([]byte, error) {
 	rawInfo := RAW_READ_INFO{
 		DiskOffset:  int64(sector * DISK_OFFSET_SIZE),
 		SectorCount: 1,
 		TrackMode:   TRACK_MODE_TYPE_CDDA,
 	}
 	sectorBuffer := make([]byte, RAW_SECTOR_SIZE)
-	readBytes := uint32(0)
 	if err := windows.DeviceIoControl(
 		handle,
 		IOCTL_CDROM_RAW_READ,
@@ -49,30 +82,11 @@ func readSector(handle windows.Handle, sector int) ([]byte, error) {
 		uint32(unsafe.Sizeof(rawInfo)),
 		&sectorBuffer[0],
 		uint32(len(sectorBuffer)),
-		&readBytes,
+		new(uint32),
 		nil,
 	); err != nil {
 		return nil, fmt.Errorf("sector: %d not read: %v", sector, err)
 	}
 
 	return sectorBuffer, nil
-}
-
-func ReadSector(handle windows.Handle, sector int, verifyCount int) ([]byte, error) {
-	sectorBinary, err := readSector(handle, sector)
-	if err != nil {
-		return nil, err
-	}
-
-	for range verifyCount {
-		verify, err := readSector(handle, sector)
-		if err != nil {
-			return nil, err
-		}
-		if !bytes.Equal(sectorBinary, verify) {
-			return nil, fmt.Errorf("sector: %d not verify", sector)
-		}
-	}
-
-	return sectorBinary, nil
 }

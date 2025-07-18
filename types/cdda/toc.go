@@ -46,7 +46,6 @@ func readTOC(handle windows.Handle, bufferSize int) ([]byte, error) {
 		Reserved3:            byte(0),
 	}
 	buffer := make([]byte, bufferSize)
-	readBytes := uint32(0)
 	if err := windows.DeviceIoControl(
 		handle,
 		IOCTL_CDROM_READ_TOC_EX,
@@ -54,7 +53,7 @@ func readTOC(handle windows.Handle, bufferSize int) ([]byte, error) {
 		uint32(unsafe.Sizeof(input)),
 		&buffer[0],
 		uint32(len(buffer)),
-		&readBytes,
+		new(uint32),
 		nil,
 	); err != nil {
 		return nil, err

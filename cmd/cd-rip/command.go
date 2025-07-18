@@ -2,27 +2,27 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/ryo-kagawa/Music/types/cdda"
 	"github.com/ryo-kagawa/go-utils/commandline"
-	"github.com/ryo-kagawa/go-utils/conditional"
 	"golang.org/x/sys/windows"
 )
 
 // Channels * Bit Depth
 const sampleSize = 2 * 16 / 8
+const IOCTL_STORAGE_EJECT_MEDIA = 0x002D4808
+const IOCTL_STORAGE_LOAD_MEDIA = 0x002D480C
 
 type RAW_READ_INFO struct {
 	DiskOffset  int64
 	SectorCount uint32
 	TrackMode   uint32
-}
-
-func msfToLBA(min, sec, frame byte) int {
-	return (((int(min) * 60) + int(sec)) * 75) + int(frame)
 }
 
 type Command struct{}
@@ -31,7 +31,8 @@ var _ = (commandline.RootCommand)(Command{})
 
 func (Command) Execute(arguments []string) (string, error) {
 	// Win32 Device Namespaces
-	win32DeviceNamespaces := arguments[0]
+	driveLetter := arguments[0]
+	win32DeviceNamespaces := "\\\\.\\" + driveLetter
 	win32DeviceNamespacesPtr, err := windows.UTF16PtrFromString(win32DeviceNamespaces)
 	if err != nil {
 		return "", err
@@ -50,7 +51,7 @@ func (Command) Execute(arguments []string) (string, error) {
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
 		nil,
 		windows.OPEN_EXISTING,
-		windows.FILE_ATTRIBUTE_NORMAL,
+		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_NO_BUFFERING,
 		0,
 	)
 	if err != nil {
@@ -58,49 +59,36 @@ func (Command) Execute(arguments []string) (string, error) {
 	}
 	defer windows.CloseHandle(handle)
 
-	toc, err := cdda.ReadTOC(handle)
+	closeTray(handle)
+	if !waitReadReady(driveLetter) {
+		return "", fmt.Errorf("not read disc")
+	}
+
+	data, err := cdda.ReadAllSector(handle)
 	if err != nil {
 		return "", err
 	}
-
-	tocLength := binary.BigEndian.Uint16(toc.Length[0:2]) - 2
-	leadOutLBA := 0
-	track01LBA := 0
-
-	for i := range tocLength / 11 {
-		descriptor := toc.Descriptors[i]
-		switch descriptor.Point {
-		case 0x00:
-		case 0x01:
-			track01LBA = conditional.Value(
-				msfToLBA(descriptor.MsfExtra[0], descriptor.MsfExtra[1], descriptor.MsfExtra[2]) != 0,
-				msfToLBA(descriptor.MsfExtra[0], descriptor.MsfExtra[1], descriptor.MsfExtra[2]),
-				msfToLBA(descriptor.Msf[0], descriptor.Msf[1], descriptor.Msf[2]),
-			)
-		case 0xA0:
-		case 0xA1:
-		case 0xA2:
-			leadOutLBA = conditional.Value(
-				msfToLBA(descriptor.MsfExtra[0], descriptor.MsfExtra[1], descriptor.MsfExtra[2]) != 0,
-				msfToLBA(descriptor.MsfExtra[0], descriptor.MsfExtra[1], descriptor.MsfExtra[2]),
-				msfToLBA(descriptor.Msf[0], descriptor.Msf[1], descriptor.Msf[2]),
-			)
-		case 0xB0:
-		case 0xB1:
+	for range verifyCount {
+		ejectTray(handle)
+		closeTray(handle)
+		if !waitReadReady(driveLetter) {
+			return "", fmt.Errorf("not read disc")
+		}
+		result, err := cdda.ReadAllSector(handle)
+		if err != nil {
+			return "", nil
+		}
+		if !bytes.Equal(data, result) {
+			return "", fmt.Errorf("verify error: not match")
 		}
 	}
-	result, err := cdda.ReadAllSector(handle, leadOutLBA-track01LBA, verifyCount)
-	if err != nil {
-		return "", nil
-	}
-
 	if offsetSample < 0 {
 		offset := -offsetSample * sampleSize
-		result = append(bytes.Repeat([]byte{0x00}, offset), result[:len(result)-offset]...)
+		data = append(bytes.Repeat([]byte{0x00}, offset), data[:len(data)-offset]...)
 	}
 	if 0 < offsetSample {
 		offset := offsetSample * sampleSize
-		result = append(result[offset:], bytes.Repeat([]byte{0x00}, offset)...)
+		data = append(data[offset:], bytes.Repeat([]byte{0x00}, offset)...)
 	}
 
 	outFile, err := os.Create("file.wav")
@@ -110,7 +98,7 @@ func (Command) Execute(arguments []string) (string, error) {
 	defer outFile.Close()
 
 	header := []byte("RIFF")
-	header = append(header, binary.LittleEndian.AppendUint32([]byte{}, uint32(len(result)+36))...)
+	header = append(header, binary.LittleEndian.AppendUint32([]byte{}, uint32(len(data)+36))...)
 	header = append(header, []byte("WAVE")...)
 	header = append(header, []byte("fmt ")...)
 	header = append(header, binary.LittleEndian.AppendUint32([]byte{}, uint32(16))...)
@@ -123,15 +111,61 @@ func (Command) Execute(arguments []string) (string, error) {
 
 	// dataチャンク
 	header = append(header, []byte("data")...)
-	header = append(header, binary.LittleEndian.AppendUint32([]byte{}, uint32(len(result)))...)
+	header = append(header, binary.LittleEndian.AppendUint32([]byte{}, uint32(len(data)))...)
 	_, err = outFile.Write(header)
 	if err != nil {
 		return "", err
 	}
-	_, err = outFile.Write(result)
+	_, err = outFile.Write(data)
 	if err != nil {
 		return "", err
 	}
 
 	return "finish", nil
+}
+
+func closeTray(handle windows.Handle) error {
+	return windows.DeviceIoControl(
+		handle,
+		IOCTL_STORAGE_LOAD_MEDIA,
+		nil,
+		0,
+		nil,
+		0,
+		new(uint32),
+		nil,
+	)
+}
+
+func ejectTray(handle windows.Handle) error {
+	return windows.DeviceIoControl(
+		handle,
+		IOCTL_STORAGE_EJECT_MEDIA,
+		nil,
+		0,
+		nil,
+		0,
+		new(uint32),
+		nil,
+	)
+}
+
+func waitReadReady(driveLetter string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if _, err := os.Stat(driveLetter); err == nil {
+				return true
+			}
+		case <-ctx.Done():
+			if _, err := os.Stat(driveLetter); err == nil {
+				return true
+			}
+			return false
+		}
+	}
 }
