@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/ryo-kagawa/Music/types/cue"
 	"github.com/ryo-kagawa/go-utils/commandline"
@@ -16,20 +15,20 @@ var _ = (commandline.RootCommand)(Command{})
 
 func (Command) Execute(arguments []string) (string, error) {
 	cuePath := arguments[0]
-	cue, err := cue.Load(cuePath)
+	cueFile, err := cue.Load(cuePath)
 	if err != nil {
 		return "", err
 	}
-	cue = cue.SplitTrack()
-	outputDirectory := filepath.Join(filepath.Dir(cuePath), strings.ReplaceAll(cue.Album.Field.Title, "/", "_"))
+	cueFile = cueFile.SplitTrack()
+	outputDirectory := filepath.Join(filepath.Dir(cuePath), cue.TitleToFileName(cueFile.Album.Field.Title))
 	if err := os.MkdirAll(outputDirectory, 0755); err != nil {
 		return "", err
 	}
-	if err := cue.OutputWave(outputDirectory); err != nil {
+	if err := cueFile.OutputWave(outputDirectory); err != nil {
 		return "", err
 	}
-	outputPath := filepath.Join(outputDirectory, fmt.Sprintf("%s.cue", strings.ReplaceAll(cue.Album.Field.Title, "/", "_")))
-	if err := cue.OutputCuefile(outputPath); err != nil {
+	outputPath := filepath.Join(outputDirectory, fmt.Sprintf("%s.cue", cue.TitleToFileName(cueFile.Album.Field.Title)))
+	if err := cueFile.OutputCuefile(outputPath); err != nil {
 		return "", err
 	}
 

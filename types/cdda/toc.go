@@ -7,6 +7,12 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const (
+	CDROM_TOC_FULL_TOC_DATA_BLOCK_CONTROL_AUDIO_WITH_PREEMPHASIS = 0x1
+	CDROM_TOC_FULL_TOC_DATA_BLOCK_CONTROL_DIGITAL_COPY_PERMITTED = 0x2
+	CDROM_TOC_FULL_TOC_DATA_BLOCK_CONTROL_AUDIO_DATA_TRACK       = 0x4
+	CDROM_TOC_FULL_TOC_DATA_BLOCK_CONTROL_TWO_FOUR_CHANNEL_AUDIO = 0x8
+)
 const IOCTL_CDROM_READ_TOC_EX = 0x00024054
 
 type CDROM_READ_TOC_EX struct {
@@ -29,6 +35,25 @@ type CDROM_TOC_FULL_TOC_DATA_BLOCK struct {
 	MsfExtra    [3]byte
 	Zero        byte
 	Msf         [3]byte
+}
+
+func (c CDROM_TOC_FULL_TOC_DATA_BLOCK) GetAdr() byte {
+	return c.Control_Adr >> 4
+}
+func (c CDROM_TOC_FULL_TOC_DATA_BLOCK) GetControl() byte {
+	return c.Control_Adr & 0xF
+}
+func (c CDROM_TOC_FULL_TOC_DATA_BLOCK) HasAudioWithPreEmphasis() bool {
+	return c.GetControl()&CDROM_TOC_FULL_TOC_DATA_BLOCK_CONTROL_AUDIO_WITH_PREEMPHASIS != 0
+}
+func (c CDROM_TOC_FULL_TOC_DATA_BLOCK) HasDigitalCopyPermited() bool {
+	return c.GetControl()&CDROM_TOC_FULL_TOC_DATA_BLOCK_CONTROL_DIGITAL_COPY_PERMITTED != 0
+}
+func (c CDROM_TOC_FULL_TOC_DATA_BLOCK) HasAudioDataTrack() bool {
+	return c.GetControl()&CDROM_TOC_FULL_TOC_DATA_BLOCK_CONTROL_AUDIO_DATA_TRACK != 0
+}
+func (c CDROM_TOC_FULL_TOC_DATA_BLOCK) HasTwoFourChannelAudio() bool {
+	return c.GetControl()&CDROM_TOC_FULL_TOC_DATA_BLOCK_CONTROL_TWO_FOUR_CHANNEL_AUDIO != 0
 }
 
 type CDROM_TOC_FULL_TOC_DATA struct {
