@@ -96,17 +96,21 @@ type AlbumCommand struct {
 
 type AlbumField struct {
 	Rem struct {
-		Genre      string
-		Date       string
-		Publisher  string
-		Label      string
-		Producer   string
-		Composer   string
-		DiscNumber string
-		TotalDiscs string
-		DiscId     string
-		Jan        string
-		Comment    string
+		Genre       string
+		Date        string
+		Publisher   string
+		Label       string
+		Producer    string
+		Production  string
+		Work        string
+		BGMWork     string
+		BGMDirector string
+		Composer    string
+		DiscNumber  string
+		TotalDiscs  string
+		DiscId      string
+		Jan         string
+		Comment     string
 	}
 	Catalog   string
 	Title     string
@@ -223,6 +227,14 @@ func Load(cueFilepath string) (Cue, error) {
 					cue.Album.Field.Rem.Label = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "LABEL "))
 				case strings.HasPrefix(remField, "PRODUCER "):
 					cue.Album.Field.Rem.Producer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "PRODUCER "))
+				case strings.HasPrefix(remField, "PRODUCTION "):
+					cue.Album.Field.Rem.Production = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "PRODUCTION "))
+				case strings.HasPrefix(remField, "WORK "):
+					cue.Album.Field.Rem.Work = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "WORK "))
+				case strings.HasPrefix(remField, "BGM_WORK "):
+					cue.Album.Field.Rem.BGMWork = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BGM_WORK "))
+				case strings.HasPrefix(remField, "BGM_DIRECTOR "):
+					cue.Album.Field.Rem.BGMDirector = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "BGM_DIRECTOR "))
 				case strings.HasPrefix(remField, "COMPOSER "):
 					cue.Album.Field.Rem.Composer = utils.TrimQuotesIfWrapped(strings.TrimPrefix(remField, "COMPOSER "))
 				case strings.HasPrefix(remField, "DISCNUMBER "):
@@ -427,6 +439,18 @@ func (c Cue) OutputCuefile(outputPath string) error {
 	}
 	if c.Album.Field.Rem.Producer != "" {
 		output += fmt.Sprintf("REM PRODUCER \"%s\"\n", c.Album.Field.Rem.Producer)
+	}
+	if c.Album.Field.Rem.Production != "" {
+		output += fmt.Sprintf("REM PRODUCTION \"%s\"\n", c.Album.Field.Rem.Production)
+	}
+	if c.Album.Field.Rem.Work != "" {
+		output += fmt.Sprintf("REM WORK \"%s\"\n", c.Album.Field.Rem.Work)
+	}
+	if c.Album.Field.Rem.BGMWork != "" {
+		output += fmt.Sprintf("REM BGM_WORK \"%s\"\n", c.Album.Field.Rem.BGMWork)
+	}
+	if c.Album.Field.Rem.BGMDirector != "" {
+		output += fmt.Sprintf("REM BGM_DIRECTOR \"%s\"\n", c.Album.Field.Rem.BGMDirector)
 	}
 	if c.Album.Field.Rem.Composer != "" {
 		output += fmt.Sprintf("REM COMPOSER \"%s\"\n", c.Album.Field.Rem.Composer)
