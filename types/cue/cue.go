@@ -49,7 +49,9 @@ type TrackField struct {
 	Title     string
 	Performer string
 	Rem       struct {
-		Composer          string
+		// 作曲者
+		Composer string
+		// 作詞者
 		Lyricist          string
 		Guitar            string
 		ElectricGuitar    string
@@ -61,10 +63,12 @@ type TrackField struct {
 		Horn              string
 		Drums             string
 		Percussions       string
-		Arranger          string
-		Remixer           string
-		Vocal             string
-		BackingVocal      string
+		// 編曲者
+		Arranger string
+		// リミックス者
+		Remixer      string
+		Vocal        string
+		BackingVocal string
 	}
 	Flags struct {
 		// DCP
@@ -96,14 +100,19 @@ type AlbumCommand struct {
 
 type AlbumField struct {
 	Rem struct {
-		Genre       string
-		Date        string
-		Publisher   string
-		Label       string
-		Producer    string
-		Production  string
-		Work        string
-		BGMWork     string
+		Genre string
+		Date  string
+		// 販売元
+		Publisher string
+		Label     string
+		Producer  string
+		// 著作
+		Production string
+		// 製作
+		Work string
+		// BGM製作
+		BGMWork string
+		// BGM監督
 		BGMDirector string
 		Composer    string
 		DiscNumber  string
@@ -112,6 +121,7 @@ type AlbumField struct {
 		Jan         string
 		Comment     string
 	}
+	// 型番
 	Catalog   string
 	Title     string
 	Performer string
