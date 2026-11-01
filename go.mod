@@ -4,6 +4,6 @@ go 1.26.0
 
 require (
 	github.com/ryo-kagawa/go-utils v1.6.0
-	golang.org/x/sys v0.48.0
-	golang.org/x/text v0.42.0
+	golang.org/x/sys v0.49.0
+	golang.org/x/text v0.43.0
 )
